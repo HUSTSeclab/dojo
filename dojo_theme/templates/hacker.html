@@ -92,12 +92,70 @@
                 <td>{{ rank or "-" }} / {{ max_rank or "-" }}</td>
               </span>
             {% else %}
-              TODO
+              {% if module.challenges %}
+                {% for challenge in module.challenges %}
+                {% set solved = "challenge-solved" if dojo.id in user_solves and module.id in user_solves[dojo.id] and challenge.challenge_id in user_solves[dojo.id][module.id] else "challenge-unsolved" %}
+                    {% if solved == "challenge-solved" %}
+                    <div class="challenge-row">
+                      <div class="challenge-info">
+                      <h4>
+                        <span class="d-sm-block d-md-block d-lg-block">
+                          <i class="fas fa-flag pr-3 {{ solved }}"></i>{{ challenge.name or challenge.id }}
+                          {% if not challenge.visible() %}
+                          <small><small><small>
+                                <i>hidden</i> &mdash; you can see this because you are this dojo's administrator
+                          </small></small></small>
+                          {% endif %}
+                        </span>
+                      </h4>
+                      <h6>首次成功提交时间：{{user_solves[dojo.id][module.id][challenge.challenge_id]}}</h6>
+                      </div>
+                      <div class="rating-container">
+                        {% if challenge.data.level %}
+                        <span id="rating-{{ challenge.challenge_id }}" class="rating" data-level="{{ challenge.data.level }}" style="padding-right: 5px; margin-right: 5px; color: #b5e853; font-size: 25px;">
+                          {% set levelStr = challenge.data.level %}
+                          {% set level = levelStr|int %}
+                        </span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    <br>
+                    {% else %}
+                    {% endif %}
+                {% endfor %}
+              {% else %}
+              {% endif %}
             {% endif %}
           {% endcall %}
         {% endfor %}
       </div>
+      <script>
+        const getStar = (rate) => '★★★★★★★★★★☆☆☆☆☆☆☆☆☆☆'.slice(10-rate, 20-rate);
+        document.addEventListener('DOMContentLoaded', function() {
+          const ratings = document.querySelectorAll('.rating');
+          ratings.forEach(function(rating) {
+            const level = parseInt(rating.dataset.level);
+            rating.innerText = getStar(level);
+          });
+        });
+      </script>
+      <style>
+        .challenge-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 5px 0;
+        }
 
+        .challenge-info {
+          flex: 1;
+        }
+
+        .rating-container {
+          white-space: nowrap;
+          text-align: right;
+        }
+      </style>
       <br>
     {% endfor %}
 {% endblock %}
