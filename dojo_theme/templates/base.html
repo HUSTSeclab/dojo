@@ -35,6 +35,11 @@
   <body>
     {% include "components/navbar.html" %}
 
+    <div class="language-selector">
+      <a href="{{ url_for('set_language', language='en') }}">English</a>
+      <a href="{{ url_for('set_language', language='zh') }}">中文</a>
+  </div>
+
     <main role="main">
       {% block content %}
       {{ content | safe}}

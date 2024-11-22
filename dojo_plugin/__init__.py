@@ -5,6 +5,8 @@ from email.message import EmailMessage
 from email.utils import formatdate
 from urllib.parse import urlparse, urlunparse
 
+from flask import Flask, request, session, redirect, url_for
+from flask_babel import Babel
 from flask import Response, request, redirect
 from flask.json import JSONEncoder
 from itsdangerous.exc import BadSignature
@@ -149,3 +151,20 @@ def load(app):
         bootstrap()
 
     app.shell_context_processor(shell_context_processor)
+
+    # 配置 Flask-Babel
+    babel = Babel(app)
+
+    app.config['LANGUAGES'] = {
+        'en': 'English',
+        'zh': '中文'
+    }
+
+    @babel.localeselector
+    def get_locale():
+        return session.get('lang', request.accept_languages.best_match(app.config['LANGUAGES'].keys()))
+
+    @app.route('/set_language/<language>')
+    def set_language(language):
+        session['lang'] = language
+        return redirect(request.referrer or url_for('index'))
