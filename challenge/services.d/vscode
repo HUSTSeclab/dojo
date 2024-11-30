@@ -8,7 +8,7 @@ start-stop-daemon --start \
                   --make-pidfile \
                   --background \
                   --no-close \
-                  --startas /usr/bin/code-server \
+                  --startas /usr/lib/code-server/bin/code-server \
                   -- \
                   --auth=none \
                   --bind-addr=dojo-user:6080 \

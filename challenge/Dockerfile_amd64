@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG UBUNTU_VERSION=20.04
+ARG OPEN_EULER_VERSION=22.03
 ARG DOJO_CHALLENGE=challenge-mini
 ARG DEFAULT_INSTALL_SELECTION=yes
 ARG INSTALL_KERNEL=${DEFAULT_INSTALL_SELECTION}
@@ -11,7 +11,6 @@ ARG INSTALL_AFL=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_RAPPEL=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_RP=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_GECKODRIVER=${DEFAULT_INSTALL_SELECTION}
-# ARG INSTALL_BURPSUITE=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_BUSYBOX=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_GLOW=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_DESKTOP=${DEFAULT_INSTALL_SELECTION}
@@ -24,126 +23,119 @@ ARG INSTALL_GDB=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_TOOLS_PIP=${DEFAULT_INSTALL_SELECTION}
 ARG INSTALL_TOOLS_APT=${DEFAULT_INSTALL_SELECTION}
 
-FROM ubuntu:${UBUNTU_VERSION} AS essentials
+
+FROM openeuler/openeuler:${OPEN_EULER_VERSION} AS essentials
 
 SHELL ["/bin/bash", "-ceov", "pipefail"]
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV LC_CTYPE=C.UTF-8
 
+RUN dnf install -y dpkg
 RUN <<EOF
-    rm -f /etc/apt/apt.conf.d/docker-clean
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
-
-    (set +o pipefail; yes | unminimize)
-
+    rm -f /etc/yum/yum.conf.d/docker-clean
+    echo 'keepcache=1' >> /etc/yum.conf
     dpkg --add-architecture i386
+    dnf install -y glibc-langpack-en glibc-langpack-zh glibc-common
+    dnf makecache
 
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    dnf clean all && rm -rf /var/cache/yum/*
 EOF
 
-RUN sed -i.bak 's|https\?://archive.ubuntu.com|http://mirrors.hust.edu.cn|g' /etc/apt/sources.list
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && xargs apt-get install --no-install-recommends -yqq <<EOF && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-        ca-certificates
-        curl
-        socat
-        sudo
-        vim
-        wget
-        unzip
-EOF
+RUN dnf update -y && dnf install -y \
+    ca-certificates \
+    curl \
+    socat \
+    sudo \
+    vim \
+    wget \
+    unzip
 
-RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
+# RUN dnf -y remove -purge at-spi2-core tumbler gvfs-* && \
+#     dnf -y autoremove && \
+#     dnf clean all
+
+RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED    
 
 ################################################################################
 
 FROM essentials AS builder-essentials
 
-RUN sed -i.bak 's|https\?://archive.ubuntu.com|http://mirrors.hust.edu.cn|g' /etc/apt/sources.list
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && xargs apt-get install --no-install-recommends -yqq <<EOF && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-        build-essential
-EOF
+RUN dnf update -y && dnf install -y gcc gcc-c++ make && dnf clean all
 
 ################################################################################
 
 FROM builder-essentials AS builder
 
-RUN sed -i.bak 's|https\?://archive.ubuntu.com|http://mirrors.hust.edu.cn|g' /etc/apt/sources.list
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && xargs apt-get install --no-install-recommends -yqq <<EOF && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-        autoconf
-        bc
-        bison
-        cargo
-        clang
-        cmake
-        cpio
-        openjdk-17-jdk
-        flex
-        dwarves
-        g++-multilib
-        gcc-multilib
-        git
-        libc6-dev-i386
-        libc6:i386
-        libedit-dev
-        libelf-dev
-        libffi-dev
-        libglib2.0-dev
-        libgmp-dev
-        libini-config-dev
-        libncurses5:i386
-        libpcap-dev
-        libpixman-1-dev
-        libseccomp-dev
-        libssl-dev
-        libstdc++6:i386
-        libtool-bin
-        llvm
-        man-db
-        manpages-dev
-        nasm
-        python-is-python3
-        python3-dev
-        python3-pip
-        rubygems
-        squashfs-tools
-        upx-ucl
-EOF
+RUN dnf update -y && dnf install -y \
+    autoconf \
+    bc \
+    bison \
+    # cargo \
+    clang \
+    cmake \
+    cpio \
+    java-17-openjdk-devel \
+    flex \
+    dwarves \
+    # g++-multilib \
+    # gcc-multilib \
+    git \
+    # libc6-dev-i386 \
+    # libc6.i386 \
+    # libedit-devel \
+    # libelf-devel \
+    libffi-devel \
+    # libglib2.0-devel \
+    # libgmp-devel \
+    # libini-config-devel \
+    # libncurses5.i386 \
+    libpcap-devel \
+    # libpixman-1-devel \
+    libseccomp-devel \
+    # libssl-devel \
+    # libstdc++6.i386 \
+    libtool \
+    llvm \
+    man-db \
+    man-pages \
+    nasm \
+    python3 \
+    python3-devel \
+    python3-pip \
+    rubygems \
+    squashfs-tools && \
+    # upx-ucl && \
+    dnf clean all
 
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN rustup install 1.7.0 \
+    && rustup default 1.7.0
 ################################################################################
 
 FROM builder AS builder-github-tools
-RUN <<EOF
-    git clone --depth 1 --recurse-submodules https://github.com/zolutal/kropr /opt/kropr
-    cd /opt/kropr
-    cargo install --path . --root /tmp
-    mv /tmp/bin/ropr /usr/bin/kropr
-    chmod +x /usr/bin/kropr
 
-    git clone --depth 1 --recurse-submodules https://github.com/zolutal/gdb-pt-dump /opt/pt-dump
-EOF
+
+# RUN git clone --depth 1 --recurse-submodules https://github.com/zolutal/kropr /opt/kropr &&\
+#     cd /opt/kropr && \
+#     cargo install --path . --root /tmp && \
+#     mv /tmp/bin/ropr /usr/bin/kropr && \
+#     chmod +x /usr/bin/kropr && \
+#     git clone --depth 1 --recurse-submodules https://github.com/zolutal/gdb-pt-dump /opt/pt-dump
 
 ################################################################################
 
 FROM builder AS builder-kernel-no
 RUN mkdir /opt/linux
-FROM builder AS builder-kernel-yes
 
-RUN <<EOF
-    mkdir /opt/linux
-    wget -O - https://mirrors.hust.edu.cn/kernel.org/linux/kernel/v6.x/linux-6.6.32.tar.gz | tar xzC /opt/linux
-    cd /opt/linux/linux-6.6.32
+FROM builder AS builder-kernel-yes
+RUN mkdir /opt/linux && \
+    wget -O - https://mirrors.hust.edu.cn/kernel.org/linux/kernel/v6.x/linux-6.6.32.tar.gz | tar xzC /opt/linux && \
+    cd /opt/linux/linux-6.6.32 && \
     make defconfig
-EOF
 
 RUN awk '{$1=$1};1' >> /opt/linux/linux-6.6.32/.config <<EOF
     CONFIG_9P_FS=y
@@ -179,13 +171,11 @@ RUN awk '{$1=$1};1' >> /opt/linux/linux-6.6.32/.config <<EOF
     CONFIG_VIRTIO_PCI_LEGACY=y
 EOF
 
-RUN <<EOF
-    cd /opt/linux/linux-6.6.32
-    make -j$(nproc) bzImage
-    ln -sf $PWD/arch/x86/boot/bzImage ../bzImage
-    ln -sf $PWD/vmlinux ../vmlinux
+RUN cd /opt/linux/linux-6.6.32 && \
+    make -j$(nproc) bzImage && \
+    ln -sf $PWD/arch/x86/boot/bzImage ../bzImage && \
+    ln -sf $PWD/vmlinux ../vmlinux && \
     ln -sf /opt/linux/linux-6.6.32 /opt/linux/linux
-EOF
 
 FROM builder-kernel-${INSTALL_KERNEL} AS builder-kernel
 
@@ -194,31 +184,25 @@ FROM builder-kernel-${INSTALL_KERNEL} AS builder-kernel
 FROM builder AS builder-gdb-no
 FROM builder AS builder-gdb-yes
 
-RUN <<EOF
-    mkdir /opt/gdb
-    wget -O - https://ftp.gnu.org/gnu/gdb/gdb-11.1.tar.gz | tar xzC /opt/gdb
-    cd /opt/gdb/gdb-11.1
-    mkdir build
-    cd build
-    ../configure --prefix=/usr --with-python=/usr/bin/python3
-    make -j$(nproc)
+RUN mkdir /opt/gdb && \
+    wget -O - https://ftp.gnu.org/gnu/gdb/gdb-11.1.tar.gz | tar xzC /opt/gdb && \
+    cd /opt/gdb/gdb-11.1 && \
+    mkdir build && \
+    cd build && \
+    ../configure --prefix=/usr --with-python=/usr/bin/python3 && \
+    make -j$(nproc) && \
     make install
-EOF
 
-RUN <<EOF
-    git clone --branch 2024.02.14 --depth 1 --recurse-submodules https://github.com/pwndbg/pwndbg /opt/pwndbg
-    cd /opt/pwndbg
-    ./setup.sh
-
-    mkdir -p /opt/gef
-    wget -O /opt/gef/gdbinit-gef.py -q https://gef.blah.cat/py
-
-    git clone --depth 1 https://github.com/jerdna-regeiz/splitmind /opt/splitmind
-    git clone https://github.com/scwuaptx/Pwngdb.git /opt/Pwngdb
-    git clone --depth 1 https://github.com/nccgroup/libslub /opt/libslub
-    cd /opt/libslub
+RUN git clone --branch 2024.02.14 --depth 1 --recurse-submodules https://github.com/pwndbg/pwndbg /opt/pwndbg && \
+    cd /opt/pwndbg && \
+    ./setup.sh && \
+    mkdir -p /opt/gef && \
+    wget -O /opt/gef/gdbinit-gef.py -q https://gef.blah.cat/py && \
+    git clone --depth 1 https://github.com/jerdna-regeiz/splitmind /opt/splitmind && \
+    git clone https://github.com/scwuaptx/Pwngdb.git /opt/Pwngdb && \
+    git clone --depth 1 https://github.com/nccgroup/libslub /opt/libslub && \
+    cd /opt/libslub && \
     pip install -r requirements.txt
-EOF
 
 FROM builder-gdb-${INSTALL_GDB} AS builder-gdb
 
@@ -226,19 +210,28 @@ FROM builder-gdb-${INSTALL_GDB} AS builder-gdb
 
 FROM essentials AS builder-code-server
 
-RUN <<EOF
-    curl -fsSL https://gitee.com/mirrors/code-server/raw/main/install.sh | /bin/sh /dev/stdin
-    mkdir -p /opt/code-server/extensions
-    wget -O /tmp/ms-vscode-cpptools.vsix 'https://github.com/microsoft/vscode-cpptools/releases/download/v1.20.5/cpptools-linux.vsix'    
+RUN curl -fsSL https://gitee.com/mirrors/code-server/raw/main/install.sh | /bin/sh /dev/stdin && \
+    mv ~/.local/lib/code-server-4.95.3 /usr/lib/code-server && \
+    ln -s /usr/lib/code-server/bin/code-server /usr/bin/code-server && \
+    mkdir -p /opt/code-server/extensions && \
+    wget -O /tmp/ms-vscode-cpptools.vsix 'https://github.com/microsoft/vscode-cpptools/releases/download/v1.20.5/cpptools-linux.vsix' && \
     code-server --extensions-dir=/opt/code-server/extensions \
-    	--install-extension ms-python.python \
-     	--install-extension /tmp/ms-vscode-cpptools.vsix
-    chmod +x /opt/code-server/extensions/ms-vscode.cpptools-*/bin/{cpptools*,libc.so}
+        --install-extension ms-python.python \
+        --install-extension /tmp/ms-vscode-cpptools.vsix && \
+    chmod +x /opt/code-server/extensions/ms-vscode.cpptools-*/bin/{cpptools*,libc.so} && \
     rm -rf /root/.cache/code-server /root/.local/share/code-server /tmp/ms-vscode-cpptools.vsix
-EOF
 
 WORKDIR /usr/lib/code-server/lib/vscode/node_modules/@vscode/ripgrep/bin
 
+# RUN mv rg rg.orig && \
+#     echo '#!/usr/bin/python' > ./rg && \
+#     echo 'import sys' >> ./rg && \
+#     echo 'import os' >> ./rg && \
+#     echo 'sys.argv[0] += ".orig"' >> ./rg && \
+#     echo 'if "--follow" in sys.argv:' >> ./rg && \
+#     echo '    sys.argv.remove("--follow")' >> ./rg && \
+#     echo 'os.execv(sys.argv[0], sys.argv)' >> ./rg && \
+#     chmod +x rg
 RUN mv rg rg.orig
 
 COPY <<EOF ./rg
@@ -259,67 +252,53 @@ RUN chmod +x rg
 
 FROM builder AS builder-tcpdump-no
 FROM builder AS builder-tcpdump-yes
-RUN <<EOF
-    git clone --depth 1 https://github.com/the-tcpdump-group/tcpdump /opt/tcpdump
-    cd /opt/tcpdump
-    ./autogen.sh
-    ./configure
+RUN git clone --depth 1 https://github.com/the-tcpdump-group/tcpdump /opt/tcpdump && \
+    cd /opt/tcpdump && \
+    ./autogen.sh && \
+    ./configure && \
     make install
-EOF
 FROM builder-tcpdump-${INSTALL_TCPDUMP} AS builder-tcpdump
 
 FROM builder AS builder-capstone-no
 FROM builder AS builder-capstone-yes
-RUN <<EOF
-    git clone --depth 1 https://github.com/capstone-engine/capstone /opt/capstone
-    cd /opt/capstone
-    make
+RUN git clone --depth 1 https://github.com/capstone-engine/capstone /opt/capstone && \
+    cd /opt/capstone && \
+    make && \
     make install
-EOF
 FROM builder-capstone-${INSTALL_CAPSTONE} AS builder-capstone
 
 FROM builder AS builder-radare2-no
 FROM builder AS builder-radare2-yes
-RUN <<EOF
-    git clone --depth 1 https://github.com/radareorg/radare2 /opt/radare2
-    cd /opt/radare2
+RUN git clone --depth 1 https://github.com/radareorg/radare2 /opt/radare2 && \
+    cd /opt/radare2 && \
     sys/install.sh
-EOF
 FROM builder-radare2-${INSTALL_RADARE2} AS builder-radare2
 
 FROM builder AS builder-aflplusplus-no
 FROM builder AS builder-aflplusplus-yes
-RUN <<EOF
-    git clone --depth 1 https://github.com/aflplusplus/aflplusplus /opt/aflplusplus
-    cd /opt/aflplusplus
-    make distrib
+RUN git clone --depth 1 https://github.com/aflplusplus/aflplusplus /opt/aflplusplus && \
+    cd /opt/aflplusplus && \
+    make distrib && \
     make install
-EOF
 FROM builder-aflplusplus-${INSTALL_AFL} AS builder-aflplusplus
 
 FROM builder AS builder-rappel-no
 FROM builder AS builder-rappel-yes
-RUN <<EOF
-    git clone --depth 1 https://github.com/yrp604/rappel /opt/rappel
-    cd /opt/rappel
-    make
+RUN git clone --depth 1 https://github.com/yrp604/rappel /opt/rappel && \
+    cd /opt/rappel && \
+    make && \
     cp bin/rappel /usr/bin/rappel
-EOF
 FROM builder-rappel-${INSTALL_RAPPEL} AS builder-rappel
 
 FROM builder AS builder-rp-no
 FROM builder AS builder-rp-yes
-RUN <<EOF
-    wget https://github.com/0vercl0k/rp/releases/download/v2.0.2/rp-lin-x64 -O /usr/bin/rp++
+RUN wget https://github.com/0vercl0k/rp/releases/download/v2.0.2/rp-lin-x64 -O /usr/bin/rp++ && \
     chmod +x /usr/bin/rp++
-EOF
 FROM builder-rp-${INSTALL_RP} AS builder-rp
 
 FROM builder AS builder-geckodriver-no
 FROM builder AS builder-geckodriver-yes
-RUN <<EOF
-    wget -q -O - https://github.com/mozilla/geckodriver/releases/download/v0.32.0/geckodriver-v0.32.0-linux64.tar.gz | tar xvz -C /usr/local/bin
-EOF
+RUN wget -q -O - https://github.com/mozilla/geckodriver/releases/download/v0.32.0/geckodriver-v0.32.0-linux64.tar.gz | tar xvz -C /usr/local/bin
 FROM builder-geckodriver-${INSTALL_GECKODRIVER} AS builder-geckodriver
 
 # FROM builder AS builder-burpsuite-no
@@ -333,42 +312,38 @@ FROM builder-geckodriver-${INSTALL_GECKODRIVER} AS builder-geckodriver
 
 FROM builder AS builder-busybox-no
 FROM builder AS builder-busybox-yes
-RUN <<EOF
-    VERSION="busybox-1.33.2"
-    mkdir /opt/busybox && cd "$_"
-    wget -q -O - "https://busybox.net/downloads/${VERSION}.tar.bz2" | tar xvj
-    pushd "${VERSION}"
-    make defconfig
-    sed -e 's/.*CONFIG_STATIC .*/CONFIG_STATIC=y/' -i .config
-    make -j$(nproc) install
-    popd
+RUN VERSION="busybox-1.33.2" && \
+    mkdir /opt/busybox && cd "$_" && \
+    wget -q -O - "https://busybox.net/downloads/${VERSION}.tar.bz2" | tar xvj && \
+    pushd "${VERSION}" && \
+    make defconfig && \
+    sed -e 's/.*CONFIG_STATIC .*/CONFIG_STATIC=y/' -i .config && \
+    make -j"$(nproc)" install && \
+    popd && \
     ln -s "${VERSION}/_install" /opt/busybox/fs
-EOF
 FROM builder-busybox-${INSTALL_BUSYBOX} AS builder-busybox
 
 FROM builder AS builder-glow-no
 FROM builder AS builder-glow-yes
 RUN <<EOF
-    VERSION="1.5.1"
-    DEB_NAME="glow_${VERSION}_amd64.deb"
+    VERSION="2.0.0"
     pushd /tmp
-    wget -q "https://github.com/charmbracelet/glow/releases/download/v${VERSION}/${DEB_NAME}"
-    apt install "./${DEB_NAME}"
-    rm "${DEB_NAME}"
+    wget -q "https://github.com/charmbracelet/glow/releases/download/v2.0.0/glow-2.0.0-1.x86_64.rpm"
+    dnf install "./glow-2.0.0-1.x86_64.rpm"
+    rm "glow-2.0.0-1.x86_64.rpm"
     popd
 EOF
 FROM builder-glow-${INSTALL_GLOW} AS builder-glow
 
 FROM builder AS builder-virtiofsd-no
 RUN mkdir /opt/virtiofsd
+
 FROM builder AS builder-virtiofsd-yes
-RUN <<EOF
-    mkdir /opt/virtiofsd && cd "$_"
-    wget -q -O ./build.zip "https://gitlab.com/virtio-fs/virtiofsd/-/jobs/artifacts/main/download?job=publish"
-    unzip -p ./build.zip "$(zipinfo -1 ./build.zip | head -n1)" > ./virtiofsd
-    rm -f ./build.zip
+RUN mkdir /opt/virtiofsd && cd "$_" && \
+    wget -q -O ./build.zip "https://gitlab.com/virtio-fs/virtiofsd/-/jobs/artifacts/main/download?job=publish" && \
+    unzip -p ./build.zip "$(zipinfo -1 ./build.zip | head -n1)" > ./virtiofsd && \
+    rm -f ./build.zip && \
     chmod +x ./virtiofsd
-EOF
 FROM builder-virtiofsd-${INSTALL_VIRTIOFSD} AS builder-virtiofsd
 
 ################################################################################
@@ -376,27 +351,108 @@ FROM builder-virtiofsd-${INSTALL_VIRTIOFSD} AS builder-virtiofsd
 FROM essentials AS builder-desktop-no
 FROM essentials AS builder-desktop-yes
 
-ARG UBUNTU_VERSION=20.04
-RUN sed -i.bak 's|https\?://archive.ubuntu.com|http://mirrors.hust.edu.cn|g' /etc/apt/sources.list
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    [ "${UBUNTU_VERSION}" == "20.04" ] && TGR=common || TGR=tools; \
-    apt-get update && xargs apt-get install -yqq <<EOF && \
-    apt-get -y remove --purge at-spi2-core tumbler gvfs-* && \
-    apt-get -y autoremove && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-        novnc
-        tigervnc-standalone-server
-        tigervnc-$TGR
-        websockify
-        xterm
-        dbus-x11
-        mousepad
-        xclip
-        xfce4
-        xfce4-terminal
-EOF
+ARG OPEN_EULER_VERSION=22.03
 
+RUN dnf makecache && \
+    dnf update -y && \
+    dnf install -y novnc tigervnc-server tigervnc python3-websockify.noarch xterm dbus-x11 mousepad xclip xfce4-terminal xfce4-panel xfce4-session xfce4-settings xfce4-terminal xfdesktop xfwm4
+     
+    # ffmpeg-devel fltk-devel gnutls-devel gmp-devel nettle-devel pam-devel libXi-devel intltool gtk-doc exo-devel libxfce4ui-devel garcon-devel libwnck3-devel libnotify-devel upower-devel libgudev-devel xorg-x11-apps xorg-x11-drivers xorg-x11-drv-ati xorg-x11-drv-dummy xorg-x11-drv-evdev xorg-x11-drv-fbdev xorg-x11-drv-intel xorg-x11-drv-libinput xorg-x11-drv-nouveau xorg-x11-drv-qxl xorg-x11-drv-synaptics-legacy xorg-x11-drv-v4l xorg-x11-drv-vesa xorg-x11-drv-vmware xorg-x11-drv-wacom xorg-x11-fonts xorg-x11-fonts-others xorg-x11-font-utils xorg-x11-server xorg-x11-server-utils xorg-x11-server-Xephyr xorg-x11-server-Xspice xorg-x11-util-macros xorg-x11-utils xorg-x11-xauth xorg-x11-xbitmaps xorg-x11-xinit xorg-x11-xkb-utils
+    # tigervnc-tools websockify xfce4
+# RUN git clone --depth 1 --recurse-submodules https://github.com/TigerVNC/tigervnc.git /opt/tigervnc && \
+#     mkdir /opt/tigervnc/build/  && \
+#     cd /opt/tigervnc/build/ && \
+#     cmake -DENABLE_PAM:BOOL=OFF ..  && \
+#     make  && \
+#     make install
+    
+    
+# RUN pip install websockify
+
+# RUN wget -P /tmp https://archive.xfce.org/xfce/4.14/fat_tarballs/xfce-4.14.tar.bz2 &&\
+#     mkdir -p /opt/xfce4  && \
+#     tar xvf /tmp/xfce-4.14.tar.bz2 -C /opt/xfce4 &&\
+#     cd /opt/xfce4/src  &&\
+#     tar xvjf Thunar-1.8.9.tar.bz2 -C /opt/xfce4/src && rm -f Thunar-1.8.9.tar.bz2 && \
+#     tar xvjf libxfce4ui-4.14.1.tar.bz2 -C /opt/xfce4/src && rm -f libxfce4ui-4.14.1.tar.bz2 && \
+#     tar xvjf tumbler-0.2.7.tar.bz2 -C /opt/xfce4/src && rm -f tumbler-0.2.7.tar.bz2 && \
+#     tar xvjf xfce4-panel-4.14.0.tar.bz2 -C /opt/xfce4/src && rm -f xfce4-panel-4.14.0.tar.bz2 && \
+#     tar xvjf xfce4-settings-4.14.0.tar.bz2 -C /opt/xfce4/src && rm -f xfce4-settings-4.14.0.tar.bz2 && \
+#     tar xvjf xfwm4-4.14.0.tar.bz2 -C /opt/xfce4/src && rm -f xfwm4-4.14.0.tar.bz2 && \
+#     tar xvjf exo-0.12.8.tar.bz2 -C /opt/xfce4/src && rm -f exo-0.12.8.tar.bz2 && \
+#     tar xvjf libxfce4util-4.14.0.tar.bz2 -C /opt/xfce4/src && rm -f libxfce4util-4.14.0.tar.bz2 && \
+#     tar xvjf xfce4-appfinder-4.14.0.tar.bz2 -C /opt/xfce4/src && rm -f xfce4-appfinder-4.14.0.tar.bz2 && \
+#     tar xvjf xfce4-power-manager-1.6.5.tar.bz2 -C /opt/xfce4/src && rm -f xfce4-power-manager-1.6.5.tar.bz2 && \
+#     tar xvjf xfconf-4.14.1.tar.bz2 -C /opt/xfce4/src && rm -f xfconf-4.14.1.tar.bz2 && \
+#     tar xvjf garcon-0.6.4.tar.bz2 -C /opt/xfce4/src && rm -f garcon-0.6.4.tar.bz2 && \
+#     tar xvjf thunar-volman-0.9.5.tar.bz2 -C /opt/xfce4/src && rm -f thunar-volman-0.9.5.tar.bz2 && \
+#     tar xvjf xfce4-dev-tools-4.14.0.tar.bz2 -C /opt/xfce4/src && rm -f xfce4-dev-tools-4.14.0.tar.bz2 && \
+#     tar xvjf xfce4-session-4.14.0.tar.bz2 -C /opt/xfce4/src && rm -f xfce4-session-4.14.0.tar.bz2 && \
+#     tar xvjf xfdesktop-4.14.1.tar.bz2 -C /opt/xfce4/src && rm -f xfdesktop-4.14.1.tar.bz2  && \
+#     cd /opt/xfce4/src/Thunar-1.8.9 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/libxfce4ui-4.14.1 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/tumbler-0.2.7 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfce4-panel-4.14.0 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfce4-settings-4.14.0 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfwm4-4.14.0 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/exo-0.12.8 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/libxfce4util-4.14.0 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfce4-appfinder-4.14.0 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfce4-power-manager-1.6.5 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfconf-4.14.1 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/garcon-0.6.4 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/thunar-volman-0.9.5 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfce4-dev-tools-4.14.0 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfce4-session-4.14.0 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install  &&\
+#     cd /opt/xfce4/src/xfdesktop-4.14.1 &&\
+#     ./configure  &&\
+#     make  &&\
+#     make install
 # TODO: can we generate desktop data with cli ???
 COPY desktop/xfce4 /usr/share/desktop-base/profiles/xdg-config/xfce4
 COPY desktop/pwncollege_background.jpg /usr/share/backgrounds/
@@ -412,9 +468,7 @@ FROM essentials AS builder-desktop-angr-management-yes
 
 COPY desktop/angr-management.desktop /usr/share/applications/
 ARG UBUNTU_VERSION=20.04
-RUN <<EOF
-    wget -q -O - https://github.com/angr/angr-management/releases/download/nightly/angr-management-ubuntu-${UBUNTU_VERSION}.tar.gz | tar xvz -C /opt
-EOF
+RUN wget -q -O - https://github.com/angr/angr-management/releases/download/nightly/angr-management-ubuntu-${UBUNTU_VERSION}.tar.gz | tar xvz -C /opt
 
 FROM builder-desktop-angr-management-${INSTALL_ANGR_MANAGEMENT} AS builder-desktop-angr-management
 
@@ -424,12 +478,10 @@ FROM essentials AS builder-desktop-ghidra-no
 FROM essentials AS builder-desktop-ghidra-yes
 
 COPY desktop/Ghidra.desktop /usr/share/applications/
-RUN <<EOF
-    wget -q -O /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_10.3_build/ghidra_10.3_PUBLIC_20230510.zip
-    unzip /tmp/ghidra.zip -d /tmp
-    mv /tmp/ghidra_10.3_PUBLIC /opt/ghidra
+RUN wget -q -O /tmp/ghidra.zip https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_10.3_build/ghidra_10.3_PUBLIC_20230510.zip && \
+    unzip /tmp/ghidra.zip -d /tmp && \
+    mv /tmp/ghidra_10.3_PUBLIC /opt/ghidra && \
     rm /tmp/ghidra.zip
-EOF
 
 FROM builder-desktop-ghidra-${INSTALL_GHIDRA} AS builder-desktop-ghidra
 
@@ -441,12 +493,10 @@ FROM essentials AS builder-desktop-ida-free-yes
 # IDA Freeware: only permissible for free and open deployments of the dojo!
 COPY desktop/ida64.desktop /usr/share/applications/
 COPY desktop/ida.opt /opt/ida/ida.opt
-RUN <<EOF
-    wget -O /tmp/idafree80_linux.run https://out7.hex-rays.com/files/idafree80_linux.run
-    chmod 755 /tmp/idafree80_linux.run
-    /tmp/idafree80_linux.run --optionfile /opt/ida/ida.opt
+RUN wget -O /tmp/idafree80_linux.run https://out7.hex-rays.com/files/idafree80_linux.run && \
+    chmod 755 /tmp/idafree80_linux.run && \
+    /tmp/idafree80_linux.run --optionfile /opt/ida/ida.opt && \
     rm /tmp/idafree80_linux.run /tmp/installbuilder_installer.log
-EOF
 
 FROM builder-desktop-ida-free-${INSTALL_IDA_FREE} AS builder-desktop-ida-free
 
@@ -456,12 +506,10 @@ FROM essentials AS builder-desktop-binja-free-no
 FROM essentials AS builder-desktop-binja-free-yes
 
 COPY desktop/binary-ninja.desktop /usr/share/applications/
-RUN <<EOF
-    wget -O /tmp/BinaryNinja-free.zip https://cdn.binary.ninja/installers/BinaryNinja-free.zip
-    unzip -d /opt /tmp/BinaryNinja-free.zip
-    wget -O /opt/binaryninja/icon.png  https://binary.ninja/icons/android-chrome-192x192.png
+RUN wget -O /tmp/BinaryNinja-free.zip https://cdn.binary.ninja/installers/BinaryNinja-free.zip && \
+    unzip -d /opt /tmp/BinaryNinja-free.zip && \
+    wget -O /opt/binaryninja/icon.png  https://binary.ninja/icons/android-chrome-192x192.png && \
     rm /tmp/BinaryNinja-free.zip
-EOF
 
 FROM builder-desktop-binja-free-${INSTALL_BINJA_FREE} AS builder-desktop-binja-free
 
@@ -470,71 +518,64 @@ FROM builder-desktop-binja-free-${INSTALL_BINJA_FREE} AS builder-desktop-binja-f
 FROM essentials AS builder-tools-apt-no
 FROM essentials AS builder-tools-apt-yes
 
-RUN sed -i.bak 's|https\?://archive.ubuntu.com|http://mirrors.hust.edu.cn|g' /etc/apt/sources.list
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && xargs apt-get install --no-install-recommends -yqq <<EOF && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-        arping
-        bash-builtins
-        bat
-        binutils
-        binwalk
-        bsdmainutils
-        bsdutils
-        debianutils
-        diffutils
-        ed
-        elfutils
-        emacs
-        ethtool
-        exiftool
-        expect
-        findutils
-        firefox
-        fish
-        fonts-wqy-zenhei
-        fortune
-        gdb
-        gedit
-        genisoimage
-        gnupg-utils
-        hexedit
-        icdiff
-        iproute2
-        iputils-ping
-        ipython3
-        keyutils
-        kmod
-        less
-        ltrace
-        nano
-        neovim
-        net-tools
-        netcat-openbsd
-        nmap
-        openssh-server
-        p7zip-full
-        parallel
-        patchelf
-        pcaputils
-        pcre2-utils
-        psutils
-        python3-ipdb
-        qemu-system-x86
-        qemu-user
-        qemu-utils
-        rsync
-        screen
-        silversearcher-ag
-        strace
-        tmux
-        valgrind
-        whiptail
-        wireshark
-        zip
-        zsh
-EOF
+RUN dnf update -y && dnf install -y \
+    arping \
+    bash-builtins \
+    bat \
+    binutils \
+    binwalk \
+    bsdtar \
+    coreutils \
+    debianutils \
+    diffutils \
+    ed \
+    elfutils \
+    emacs \
+    ethtool \
+    exiftool \
+    expect \
+    findutils \
+    firefox \
+    fish \
+    fonts-wqy-zenhei \
+    fortune \
+    gdb \
+    gedit \
+    genisoimage \
+    gnupg \
+    hexedit \
+    iproute \
+    iputils \
+    ipython3 \
+    kbd \
+    kmod \
+    less \
+    ltrace \
+    nano \
+    neovim \
+    net-tools \
+    nmap \
+    openssh \
+    p7zip \
+    parallel \
+    patchutils \
+    pcap-utils \
+    procps-ng \
+    python3-ipdb \
+    qemu \
+    rsync \
+    screen \
+    silversearcher-ag \
+    strace \
+    tmux \
+    valgrind \
+    vim \
+    wget \
+    whiptail \
+    wireshark \
+    zlib \
+    zip \
+    zsh && dnf clean all
 
 FROM builder-tools-apt-${INSTALL_TOOLS_APT} AS builder-tools-apt
 
@@ -543,7 +584,7 @@ FROM builder-tools-apt-${INSTALL_TOOLS_APT} AS builder-tools-apt
 FROM builder AS builder-tools-pip-no
 FROM builder AS builder-tools-pip-yes
 
-RUN xargs pip install --force-reinstall <<EOF
+RUN pip install --force-reinstall <<EOF
     angr
     asteval
     flask
@@ -585,7 +626,7 @@ RUN gcc /opt/pwn.college/setuid_interpreter.c -DSUID_PYTHON -o /opt/pwn.college/
 
 ################################################################################
 
-FROM ubuntu:${UBUNTU_VERSION} AS challenge-nano
+FROM openeuler/openeuler:${OPEN_EULER_VERSION} AS challenge-nano
 
 SHELL ["/bin/bash", "-ceov", "pipefail"]
 
@@ -594,24 +635,20 @@ ENV LC_CTYPE=C.UTF-8
 COPY --link --from=essentials / /
 COPY --link --from=builder-pwn.college /opt/pwn.college /opt/pwn.college
 
-RUN <<EOF
-    ln -sf /bin/bash /opt/pwn.college/ssh-entrypoint
-    ln -sf /opt/pwn.college/vm/vm /usr/local/bin/vm
-
-    ln -sf /home/hacker/.tmux.conf /root/.tmux.conf
-    ln -sf /home/hacker/.gdbinit /root/.gdbinit
-    ln -sf /home/hacker/.radare2rc /root/.radare2rc
-    ln -sf /home/hacker/.pwn.conf /root/.pwn.conf
-
-    mkdir /challenge
+RUN ln -sf /bin/bash /opt/pwn.college/ssh-entrypoint && \
+    ln -sf /opt/pwn.college/vm/vm /usr/local/bin/vm && \
+    ln -sf /home/hacker/.tmux.conf /root/.tmux.conf && \
+    ln -sf /home/hacker/.gdbinit /root/.gdbinit && \
+    ln -sf /home/hacker/.radare2rc /root/.radare2rc && \
+    ln -sf /home/hacker/.pwn.conf /root/.pwn.conf && \
+    mkdir /challenge && \
     install -m 400 <(echo 'pwn.college{uninitialized}') /flag
-EOF
 
 ################################################################################
 
 FROM challenge-nano AS challenge-micro
 COPY --link --from=builder-code-server / /
-COPY --link --from=builder-github-tools / /
+COPY --link --from=builder-github-tools / / 
 
 ################################################################################
 
@@ -704,9 +741,9 @@ RUN <<EOF
     fi
 EOF
 
+RUN dnf install -y passwd
 RUN <<EOF
-    if id ubuntu; then userdel -f -r ubuntu; fi
-
+    # if id ubuntu; then userdel -f -r ubuntu; fi
     useradd -s /bin/bash -m hacker
     passwd -d hacker
 
